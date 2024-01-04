@@ -28,17 +28,6 @@ char *rrdUpdate(const char *filename, const char *template, int argc, const char
 	return rrdError();
 }
 
-char *rrdGraph(rrd_info_t **ret, int argc, char **argv) {
-	rrd_clear_error();
-	*ret = rrd_graph_v(argc, argv);
-	return rrdError();
-}
-
-char *rrdInfo(rrd_info_t **ret, char *filename) {
-	rrd_clear_error();
-	*ret = rrd_info_r(filename);
-	return rrdError();
-}
 
 char *rrdFetch(int *ret, char *filename, const char *cf, time_t *start, time_t *end, unsigned long *step, unsigned long *ds_cnt, char ***ds_namv, double **data) {
 	rrd_clear_error();

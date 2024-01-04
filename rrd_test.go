@@ -2,7 +2,6 @@ package rrd
 
 import (
 	"fmt"
-	"io/ioutil"
 	"testing"
 	"time"
 )
@@ -45,51 +44,8 @@ func TestAll(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Info
-	inf, err := Info(dbfile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for k, v := range inf {
-		fmt.Printf("%s (%T): %v\n", k, v, v)
-	}
-
-	// Graph
-	g := NewGrapher()
-	g.SetTitle("Test")
-	g.SetVLabel("some variable")
-	g.SetSize(800, 300)
-	g.SetWatermark("some watermark")
-	g.Def("v1", dbfile, "g", "AVERAGE")
-	g.Def("v2", dbfile, "cnt", "AVERAGE")
-	g.VDef("max1", "v1,MAXIMUM")
-	g.VDef("avg2", "v2,AVERAGE")
-	g.Line(1, "v1", "ff0000", "var 1")
-	g.Area("v2", "0000ff", "var 2")
-	g.GPrintT("max1", "max1 at %c")
-	g.GPrint("avg2", "avg2=%lf")
-	g.PrintT("max1", "max1 at %c")
-	g.Print("avg2", "avg2=%lf")
-
-	now := time.Now()
-
-	i, err := g.SaveGraph("/tmp/test_rrd1.png", now.Add(-20*time.Second), now)
-	fmt.Printf("%+v\n", i)
-	if err != nil {
-		t.Fatal(err)
-	}
-	i, buf, err := g.Graph(now.Add(-20*time.Second), now)
-	fmt.Printf("%+v\n", i)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = ioutil.WriteFile("/tmp/test_rrd2.png", buf, 0666)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// Fetch
-	end := time.Unix(int64(inf["last_update"].(uint)), 0)
+	end := time.Now()
 	start := end.Add(-20 * step * time.Second)
 	fmt.Printf("Fetch Params:\n")
 	fmt.Printf("Start: %s\n", start)
@@ -121,7 +77,7 @@ func TestAll(t *testing.T) {
 	}
 
 	// Xport
-	end = time.Unix(int64(inf["last_update"].(uint)), 0)
+	end = time.Now()
 	start = end.Add(-20 * step * time.Second)
 	fmt.Printf("Xport Params:\n")
 	fmt.Printf("Start: %s\n", start)

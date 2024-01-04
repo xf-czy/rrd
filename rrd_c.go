@@ -4,11 +4,9 @@ package rrd
 #include <stdlib.h>
 #include <rrd.h>
 #include "rrdfunc.h"
-#cgo pkg-config: librrd
 */
 import "C"
 import (
-	"math"
 	"reflect"
 	"strconv"
 	"strings"
@@ -183,102 +181,6 @@ func utoc(u uint) *C.char {
 	return u64toc(uint64(u))
 }
 
-func (g *Grapher) makeArgs(filename string, start, end time.Time) []*C.char {
-	args := []*C.char{
-		graphv, C.CString(filename),
-		oStart, i64toc(start.Unix()),
-		oEnd, i64toc(end.Unix()),
-		oTitle, C.CString(g.title),
-		oVlabel, C.CString(g.vlabel),
-	}
-	if g.width != 0 {
-		args = append(args, oWidth, utoc(g.width))
-	}
-	if g.height != 0 {
-		args = append(args, oHeight, utoc(g.height))
-	}
-	if g.upperLimit != -math.MaxFloat64 {
-		args = append(args, oUpperLimit, ftoc(g.upperLimit))
-	}
-	if g.lowerLimit != math.MaxFloat64 {
-		args = append(args, oLowerLimit, ftoc(g.lowerLimit))
-	}
-	if g.rigid {
-		args = append(args, oRigid)
-	}
-	if g.altAutoscale {
-		args = append(args, oAltAutoscale)
-	}
-	if g.altAutoscaleMax {
-		args = append(args, oAltAutoscaleMax)
-	}
-	if g.altAutoscaleMin {
-		args = append(args, oAltAutoscaleMin)
-	}
-	if g.noGridFit {
-		args = append(args, oNoGridFit)
-	}
-	if g.logarithmic {
-		args = append(args, oLogarithmic)
-	}
-	if g.unitsExponent != minInt {
-		args = append(
-			args,
-			oUnitsExponent, itoc(g.unitsExponent),
-		)
-	}
-	if g.unitsLength != 0 {
-		args = append(
-			args,
-			oUnitsLength, utoc(g.unitsLength),
-		)
-	}
-	if g.rightAxisScale != 0 {
-		args = append(
-			args,
-			oRightAxis,
-			C.CString(ftoa(g.rightAxisScale)+":"+ftoa(g.rightAxisShift)),
-		)
-	}
-	if g.rightAxisLabel != "" {
-		args = append(
-			args,
-			oRightAxisLabel, C.CString(g.rightAxisLabel),
-		)
-	}
-	if g.noLegend {
-		args = append(args, oNoLegend)
-	}
-	if g.lazy {
-		args = append(args, oLazy)
-	}
-	for tag, color := range g.colors {
-		args = append(args, oColor, C.CString(tag+"#"+color))
-	}
-	if g.slopeMode {
-		args = append(args, oSlopeMode)
-	}
-	if g.imageFormat != "" {
-		args = append(args, oImageFormat, C.CString(g.imageFormat))
-	}
-	if g.interlaced {
-		args = append(args, oInterlaced)
-	}
-	if g.base != 0 {
-		args = append(args, oBase, utoc(g.base))
-	}
-	if g.watermark != "" {
-		args = append(args, oWatermark, C.CString(g.watermark))
-	}
-	if g.daemon != "" {
-		args = append(args, oDaemon, C.CString(g.daemon))
-	}
-	if g.borderWidth != defWidth {
-		args = append(args, oBorder, utoc(g.borderWidth))
-	}
-	return append(args, makeArgs(g.args)...)
-}
-
 func (e *Exporter) makeArgs(start, end time.Time, step time.Duration) []*C.char {
 	args := []*C.char{
 		xport,
@@ -338,107 +240,6 @@ func updateInfoValue(i *C.struct_rrd_info_t, v interface{}) interface{} {
 	}
 
 	return nil
-}
-
-func parseRRDInfo(i *C.rrd_info_t) map[string]interface{} {
-	defer C.rrd_info_free(i)
-
-	r := make(map[string]interface{})
-	for w := (*C.struct_rrd_info_t)(i); w != nil; w = w.next {
-		kname, kkey, kid := parseInfoKey(C.GoString(w.key))
-		v, ok := r[kname]
-		switch {
-		case kid != -1:
-			var a []interface{}
-			if ok {
-				a = v.([]interface{})
-			}
-			if len(a) < kid+1 {
-				oldA := a
-				a = make([]interface{}, kid+1)
-				copy(a, oldA)
-			}
-			a[kid] = updateInfoValue(w, a[kid])
-			v = a
-		case kkey != "":
-			var m map[string]interface{}
-			if ok {
-				m = v.(map[string]interface{})
-			} else {
-				m = make(map[string]interface{})
-			}
-			old, _ := m[kkey]
-			m[kkey] = updateInfoValue(w, old)
-			v = m
-		default:
-			v = updateInfoValue(w, v)
-		}
-		r[kname] = v
-	}
-	return r
-}
-
-func parseGraphInfo(i *C.rrd_info_t) (gi GraphInfo, img []byte) {
-	inf := parseRRDInfo(i)
-	if v, ok := inf["image_info"]; ok {
-		gi.Print = append(gi.Print, v.(string))
-	}
-	for k, v := range inf {
-		if k == "print" {
-			for _, line := range v.([]interface{}) {
-				gi.Print = append(gi.Print, line.(string))
-			}
-		}
-	}
-	if v, ok := inf["image_width"]; ok {
-		gi.Width = v.(uint)
-	}
-	if v, ok := inf["image_height"]; ok {
-		gi.Height = v.(uint)
-	}
-	if v, ok := inf["value_min"]; ok {
-		gi.Ymin = v.(float64)
-	}
-	if v, ok := inf["value_max"]; ok {
-		gi.Ymax = v.(float64)
-	}
-	if v, ok := inf["image"]; ok {
-		img = v.([]byte)
-	}
-	return
-}
-
-func (g *Grapher) graph(filename string, start, end time.Time) (GraphInfo, []byte, error) {
-	var i *C.rrd_info_t
-	args := g.makeArgs(filename, start, end)
-
-	mutex.Lock() // rrd_graph_v isn't thread safe
-	defer mutex.Unlock()
-
-	err := makeError(C.rrdGraph(
-		&i,
-		C.int(len(args)),
-		&args[0],
-	))
-
-	if err != nil {
-		return GraphInfo{}, nil, err
-	}
-	gi, img := parseGraphInfo(i)
-
-	return gi, img, nil
-}
-
-// Info returns information about RRD file.
-func Info(filename string) (map[string]interface{}, error) {
-	fn := C.CString(filename)
-	defer freeCString(fn)
-	var i *C.rrd_info_t
-	err := makeError(C.rrdInfo(&i, fn))
-	if err != nil {
-		return nil, err
-	}
-	return parseRRDInfo(i), nil
 }
 
 // Fetch retrieves data from RRD file.
