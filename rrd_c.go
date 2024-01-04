@@ -9,7 +9,6 @@ import "C"
 import (
 	"reflect"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -165,17 +164,6 @@ func u64toa(u uint64) string {
 func u64toc(u uint64) *C.char {
 	return C.CString(u64toa(u))
 }
-func itoa(i int) string {
-	return i64toa(int64(i))
-}
-
-func itoc(i int) *C.char {
-	return i64toc(int64(i))
-}
-
-func utoa(u uint) string {
-	return u64toa(uint64(u))
-}
 
 func utoc(u uint) *C.char {
 	return u64toc(uint64(u))
@@ -195,51 +183,6 @@ func (e *Exporter) makeArgs(start, end time.Time, step time.Duration) []*C.char 
 		args = append(args, oDaemon, C.CString(e.daemon))
 	}
 	return append(args, makeArgs(e.args)...)
-}
-
-func parseInfoKey(ik string) (kname, kkey string, kid int) {
-	kid = -1
-	o := strings.IndexRune(ik, '[')
-	if o == -1 {
-		kname = ik
-		return
-	}
-	c := strings.IndexRune(ik[o+1:], ']')
-	if c == -1 {
-		kname = ik
-		return
-	}
-	c += o + 1
-	kname = ik[:o] + ik[c+1:]
-	kkey = ik[o+1 : c]
-	if strings.HasPrefix(kname, "ds.") {
-		return
-	} else if id, err := strconv.Atoi(kkey); err == nil && id >= 0 {
-		kid = id
-	}
-	return
-}
-
-func updateInfoValue(i *C.struct_rrd_info_t, v interface{}) interface{} {
-	switch i._type {
-	case C.RD_I_VAL:
-		return float64(*(*C.rrd_value_t)(unsafe.Pointer(&i.value[0])))
-	case C.RD_I_CNT:
-		return uint(*(*C.ulong)(unsafe.Pointer(&i.value[0])))
-	case C.RD_I_STR:
-		return C.GoString(*(**C.char)(unsafe.Pointer(&i.value[0])))
-	case C.RD_I_INT:
-		return int(*(*C.int)(unsafe.Pointer(&i.value[0])))
-	case C.RD_I_BLO:
-		blob := *(*C.rrd_blob_t)(unsafe.Pointer(&i.value[0]))
-		b := C.GoBytes(unsafe.Pointer(blob.ptr), C.int(blob.size))
-		if v == nil {
-			return b
-		}
-		return append(v.([]byte), b...)
-	}
-
-	return nil
 }
 
 // Fetch retrieves data from RRD file.
